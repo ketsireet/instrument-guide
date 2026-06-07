@@ -311,6 +311,7 @@ body {
   <div class="tab" onclick="switchTab('trays')">📦 ถาด</div>
   <div class="tab" onclick="switchTab('camera')">📷 AI สแกน</div>
   <div class="tab" onclick="switchTab('print')">🖨️ พิมพ์</div>
+  <div class="tab" onclick="switchTab('settings')">⚙️ ตั้งค่า</div>
 </div>
 
 <!-- ══ PAGE: ALL INSTRUMENTS ══ -->
@@ -387,6 +388,36 @@ body {
   <div id="print-preview-area" style="display:none;margin-top:12px;">
     <div style="font-size:12px;color:#888;margin-bottom:8px;">ตัวอย่าง (เลื่อนดูได้):</div>
     <div id="print-preview-content" style="background:#fff;border:1px solid #e0e0e0;border-radius:10px;padding:14px;font-size:11px;"></div>
+  </div>
+</div>
+
+<!-- ══ PAGE: SETTINGS ══ -->
+<div class="page" id="page-settings">
+  <div style="background:#fff;border:1.5px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px;">
+    <div style="font-size:15px;font-weight:700;margin-bottom:6px;">⚙️ ตั้งค่า Google Sheet Sync</div>
+    <div style="font-size:12px;color:#666;line-height:1.6;margin-bottom:12px;">
+      วาง Web App URL จาก Google Apps Script ที่ลงท้ายด้วย <b>/exec</b> เพื่อเก็บข้อมูลลง Google Sheet และใช้ข้อมูลร่วมกันหลายเครื่อง
+    </div>
+    <div class="field">
+      <label>Web App URL</label>
+      <input type="text" id="api-url-input" placeholder="https://script.google.com/macros/s/.../exec">
+    </div>
+    <button class="btn btn-primary" onclick="saveApiUrl()">💾 บันทึก URL</button>
+    <div class="btn-row">
+      <button class="btn btn-outline btn-sm" onclick="loadCloudData(true)">⬇️ ดึงข้อมูลจาก Google Sheet</button>
+      <button class="btn btn-success btn-sm" onclick="saveCloudData(true)">⬆️ ส่งข้อมูลขึ้น Google Sheet</button>
+    </div>
+    <div id="sync-status" style="font-size:12px;color:#666;margin-top:10px;line-height:1.6;"></div>
+  </div>
+
+  <div style="background:#fff;border:1.5px solid var(--border);border-radius:12px;padding:14px;">
+    <div style="font-size:15px;font-weight:700;margin-bottom:6px;">📌 วิธีใช้งานเร็ว</div>
+    <div style="font-size:13px;line-height:1.8;color:#333;">
+      1) ตั้งค่า URL ก่อน<br>
+      2) ไปแท็บ “ถาด” เพื่อเพิ่มชื่อถาด<br>
+      3) กดปุ่ม + เพื่อเพิ่มเครื่องมือ<br>
+      4) ทุกครั้งที่บันทึก ระบบจะเก็บทั้งในเครื่องและพยายามซิงก์ไป Google Sheet
+    </div>
   </div>
 </div>
 
@@ -477,15 +508,20 @@ body {
 
 <script>
 // ══════════════════════════════════════
-// DATA LAYER (localStorage)
+// DATA LAYER (localStorage + Google Sheet Web App)
 // ══════════════════════════════════════
 const STORE_INSTRUMENTS = 'cssd_instruments';
 const STORE_TRAYS = 'cssd_trays';
+const STORE_API_URL = 'cssd_api_url';
 
 const TRAY_COLORS = [
   '#7c3aed','#059669','#d97706','#dc2626',
   '#0891b2','#be185d','#65a30d','#ea580c','#6366f1'
 ];
+
+let API_URL = localStorage.getItem(STORE_API_URL) || '';
+let syncTimer = null;
+let isCloudLoading = false;
 
 function loadData() {
   try {
@@ -499,6 +535,105 @@ function loadData() {
 function saveData(data) {
   localStorage.setItem(STORE_INSTRUMENTS, JSON.stringify(data.instruments));
   localStorage.setItem(STORE_TRAYS, JSON.stringify(data.trays));
+
+  // Auto sync หลังจากกดบันทึก/แก้ไข/ลบ ถ้ามี Web App URL แล้ว
+  if (API_URL && !isCloudLoading) {
+    clearTimeout(syncTimer);
+    syncTimer = setTimeout(() => saveCloudData(false), 600);
+  }
+}
+
+function setSyncStatus(msg) {
+  const el = document.getElementById('sync-status');
+  if (el) el.innerHTML = msg;
+}
+
+function saveApiUrl() {
+  const input = document.getElementById('api-url-input');
+  const url = (input.value || '').trim();
+  if (!url) { toast('⚠️ กรุณาวาง Web App URL'); return; }
+  if (!url.includes('/exec')) {
+    toast('⚠️ URL ควรเป็นลิงก์ที่ลงท้ายด้วย /exec');
+  }
+  API_URL = url;
+  localStorage.setItem(STORE_API_URL, API_URL);
+  setSyncStatus('✅ บันทึก URL แล้ว<br>ตอนนี้สามารถกด “ดึงข้อมูล” หรือ “ส่งข้อมูล” ได้');
+  toast('✅ บันทึก URL แล้ว');
+}
+
+async function loadCloudData(showToast) {
+  if (!API_URL) {
+    if (showToast) toast('⚠️ กรุณาใส่ Web App URL ก่อน');
+    return;
+  }
+  try {
+    isCloudLoading = true;
+    setSyncStatus('⏳ กำลังดึงข้อมูลจาก Google Sheet...');
+    const res = await fetch(API_URL, { method: 'GET', cache: 'no-store' });
+    const cloud = await res.json();
+
+    if (!cloud || !Array.isArray(cloud.instruments) || !Array.isArray(cloud.trays)) {
+      throw new Error('รูปแบบข้อมูลไม่ถูกต้อง');
+    }
+
+    data = {
+      instruments: cloud.instruments,
+      trays: cloud.trays
+    };
+
+    // ถ้า Google Sheet ยังไม่มีถาดเลย ให้สร้างถาดเริ่มต้น
+    if (data.trays.length === 0) {
+      data.trays = [
+        { id: 't1', name: 'GENERAL', color: TRAY_COLORS[0] },
+        { id: 't2', name: 'HAND & FOOT TRAY', color: TRAY_COLORS[1] },
+        { id: 't3', name: 'PLASTICS TRAY', color: TRAY_COLORS[2] },
+        { id: 't4', name: 'ORTHOPAEDICS TRAY', color: TRAY_COLORS[3] },
+      ];
+    }
+
+    localStorage.setItem(STORE_INSTRUMENTS, JSON.stringify(data.instruments));
+    localStorage.setItem(STORE_TRAYS, JSON.stringify(data.trays));
+
+    populateTraySelect();
+    renderAll();
+    renderTrays();
+    renderPrintPage();
+
+    setSyncStatus('✅ ดึงข้อมูลสำเร็จ: เครื่องมือ ' + data.instruments.length + ' รายการ, ถาด ' + data.trays.length + ' ถาด');
+    if (showToast) toast('✅ ดึงข้อมูลสำเร็จ');
+  } catch (err) {
+    setSyncStatus('❌ ดึงข้อมูลไม่สำเร็จ: ' + err.message + '<br>ตรวจว่า URL ถูกต้องและ Apps Script Deploy เป็น Anyone แล้ว');
+    if (showToast) toast('❌ ดึงข้อมูลไม่สำเร็จ');
+  } finally {
+    isCloudLoading = false;
+  }
+}
+
+async function saveCloudData(showToast) {
+  if (!API_URL) {
+    if (showToast) toast('⚠️ กรุณาใส่ Web App URL ก่อน');
+    return;
+  }
+  try {
+    setSyncStatus('⏳ กำลังส่งข้อมูลขึ้น Google Sheet...');
+    const payload = JSON.stringify({
+      instruments: data.instruments,
+      trays: data.trays
+    });
+
+    // ใช้ text/plain เพื่อลดปัญหา CORS preflight กับ Google Apps Script
+    await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: payload
+    });
+
+    setSyncStatus('✅ ส่งข้อมูลขึ้น Google Sheet แล้ว<br>ล่าสุด: ' + new Date().toLocaleString('th-TH'));
+    if (showToast) toast('✅ ส่งข้อมูลแล้ว');
+  } catch (err) {
+    setSyncStatus('❌ ส่งข้อมูลไม่สำเร็จ: ' + err.message + '<br>ข้อมูลยังถูกเก็บไว้ในเครื่องนี้ก่อน');
+    if (showToast) toast('❌ ส่งข้อมูลไม่สำเร็จ');
+  }
 }
 
 let data = loadData();
@@ -543,6 +678,10 @@ function switchTab(tab) {
   if (tab === 'all') renderAll();
   if (tab === 'trays') renderTrays();
   if (tab === 'print') renderPrintPage();
+  if (tab === 'settings') {
+    document.getElementById('api-url-input').value = API_URL || '';
+    setSyncStatus(API_URL ? '✅ มี URL แล้ว สามารถซิงก์ได้' : '⚠️ ยังไม่ได้ใส่ Web App URL');
+  }
 }
 
 // ══════════════════════════════════════
@@ -872,12 +1011,11 @@ let capturedImageData = null;
 async function startCamera() {
   try {
     stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    const area = document.getElementById('camera-area');
+    area.innerHTML = '<video id="cam-video" autoplay playsinline style="display:block;width:100%;height:100%;object-fit:cover;"></video><canvas id="cam-canvas" style="display:none;"></canvas>';
     const video = document.getElementById('cam-video');
     video.srcObject = stream;
-    video.style.display = 'block';
     document.getElementById('cam-preview').style.display = 'none';
-    document.getElementById('cam-area').innerHTML = '';
-    document.querySelector('.cam-placeholder') && (document.querySelector('.cam-placeholder').style.display = 'none');
     document.getElementById('btn-start-cam').style.display = 'none';
     document.getElementById('btn-stop-cam').style.display = 'inline-flex';
     document.getElementById('btn-snap').style.display = 'inline-flex';
@@ -891,7 +1029,8 @@ async function startCamera() {
 
 function stopCamera() {
   if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
-  document.getElementById('cam-video').style.display = 'none';
+  const video = document.getElementById('cam-video');
+  if (video) video.style.display = 'none';
   document.getElementById('btn-start-cam').style.display = 'inline-flex';
   document.getElementById('btn-stop-cam').style.display = 'none';
   document.getElementById('btn-snap').style.display = 'none';
@@ -932,64 +1071,16 @@ async function runAIScan() {
   if (!capturedImageData) { toast('⚠️ ไม่มีรูป'); return; }
   const resultEl = document.getElementById('ai-result');
   resultEl.classList.add('show');
-  resultEl.innerHTML = `<div class="ai-badge">🤖 AI CLAUDE</div><div class="loading-dots">กำลังวิเคราะห์</div>`;
-
-  const base64 = capturedImageData.split(',')[1];
-  const mediaType = capturedImageData.startsWith('data:image/png') ? 'image/png' : 'image/jpeg';
-
-  // Build context from existing instruments
-  const existingNames = data.instruments.map(i => i.name).slice(0, 30).join(', ');
-
-  try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1000,
-        messages: [{
-          role: 'user',
-          content: [
-            {
-              type: 'image',
-              source: { type: 'base64', media_type: mediaType, data: base64 }
-            },
-            {
-              type: 'text',
-              text: `You are a surgical instrument expert for a CSSD (Central Sterile Services Department) at a hospital in Australia.
-
-Analyze this image and identify any surgical instruments visible.
-
-${existingNames ? `Instruments in our database: ${existingNames}` : ''}
-
-For each instrument found, provide:
-1. **Instrument Name** (English)
-2. **Thai name / type** (ชื่อไทย/ประเภท)
-3. **Category** (GENERAL / ORTHOPAEDICS / HAND & FOOT / ENT / etc.)
-4. **Use** (2-3 sentences in Thai about what it's used for)
-5. **Key identification features** (1-2 sentences)
-
-If multiple instruments are visible, identify all of them.
-If you can match to an instrument in our database, mention it.
-Format your response clearly with headers.
-Respond in Thai-English mixed (names in English, descriptions in Thai).`
-            }
-          ]
-        }]
-      })
-    });
-
-    const d = await response.json();
-    const text = d.content?.map(c => c.text || '').join('\n') || 'ไม่สามารถวิเคราะห์ได้';
-    resultEl.innerHTML = `
-      <div class="ai-badge">🤖 AI CLAUDE</div>
-      <div style="white-space:pre-wrap;font-size:13px;line-height:1.7">${text}</div>
-      <div style="margin-top:10px;">
-        <button class="btn btn-outline btn-sm" onclick="addFromAI()">➕ เพิ่มเครื่องมือนี้</button>
-      </div>`;
-  } catch(err) {
-    resultEl.innerHTML = `<div class="ai-badge">⚠️ ERROR</div><div>เกิดข้อผิดพลาด: ${err.message}</div>`;
-  }
+  resultEl.innerHTML = `
+    <div class="ai-badge">🤖 AI SCAN</div>
+    <div style="font-size:13px;line-height:1.7">
+      เวอร์ชันนี้ยังไม่เชื่อม API Key ของ AI เพื่อความปลอดภัยของข้อมูลและค่าใช้จ่าย<br><br>
+      วิธีใช้ตอนนี้: อัปโหลดรูปเครื่องมือใน ChatGPT แล้วถามว่า “เครื่องมือนี้ชื่ออะไร ใช้ทำอะไรใน CSSD” จากนั้นคัดลอกคำตอบมาเพิ่มในระบบนี้ได้<br><br>
+      ถ้าต้องการเพิ่มรูปนี้เป็นเครื่องมือ ให้กดปุ่มด้านล่าง
+    </div>
+    <div style="margin-top:10px;">
+      <button class="btn btn-outline btn-sm" onclick="addFromAI()">➕ เพิ่มเครื่องมือนี้</button>
+    </div>`;
 }
 
 function addFromAI() {
@@ -1139,6 +1230,10 @@ function doPrint() {
 // ══════════════════════════════════════
 populateTraySelect();
 renderAll();
+if (API_URL) {
+  setTimeout(() => loadCloudData(false), 800);
+}
 </script>
 </body>
 </html>
+
