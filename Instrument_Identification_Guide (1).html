@@ -1,0 +1,1144 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>CSSD Instrument Manager</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap');
+
+:root {
+  --bg: #f4f1ec;
+  --card: #ffffff;
+  --border: #e0dbd2;
+  --text: #1a1a1a;
+  --muted: #888;
+  --accent: #2563eb;
+  --accent-light: #eff6ff;
+  --danger: #dc2626;
+  --success: #16a34a;
+  --tray-colors: #7c3aed, #059669, #d97706, #dc2626, #0891b2, #be185d, #65a30d;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Sarabun', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  font-size: 14px;
+}
+
+/* ── Header ── */
+.header {
+  background: #1e293b;
+  color: #fff;
+  padding: 14px 16px 10px;
+  position: sticky; top: 0; z-index: 100;
+}
+.header h1 { font-size: 17px; font-weight: 700; }
+.header p { font-size: 11px; color: #94a3b8; font-family: 'IBM Plex Mono', monospace; }
+
+/* ── Nav Tabs ── */
+.tabs {
+  display: flex;
+  background: #fff;
+  border-bottom: 2px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: none;
+  position: sticky; top: 56px; z-index: 99;
+}
+.tabs::-webkit-scrollbar { display: none; }
+.tab {
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  color: var(--muted);
+  transition: all 0.15s;
+}
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* ── Main Content ── */
+.page { display: none; padding: 14px; }
+.page.active { display: block; }
+
+/* ── Search Bar ── */
+.search-wrap { position: relative; margin-bottom: 12px; }
+.search-wrap input {
+  width: 100%; padding: 9px 12px 9px 36px;
+  border: 1.5px solid var(--border); border-radius: 8px;
+  font-family: 'Sarabun', sans-serif; font-size: 14px;
+  background: #fff; outline: none;
+}
+.search-wrap input:focus { border-color: var(--accent); }
+.search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 16px; }
+
+/* ── Filter Pills ── */
+.filter-row {
+  display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px;
+}
+.pill {
+  padding: 4px 10px; border-radius: 20px;
+  font-size: 11px; font-weight: 600; cursor: pointer;
+  border: 1.5px solid transparent;
+  transition: all 0.15s;
+}
+.pill.active { border-color: currentColor; }
+
+/* ── Instrument Grid ── */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.card {
+  background: var(--card);
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.card:active { transform: scale(0.98); }
+.card-thumb {
+  width: 100%; height: 110px;
+  object-fit: cover; object-position: center;
+  background: #f5f5f5;
+  display: block;
+}
+.card-thumb-placeholder {
+  width: 100%; height: 110px;
+  background: linear-gradient(135deg, #f0f0f0, #e0e0e0);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 30px;
+}
+.card-body { padding: 8px; }
+.tray-badge {
+  display: inline-block; font-size: 9px; font-weight: 700;
+  padding: 2px 6px; border-radius: 4px; margin-bottom: 4px;
+  font-family: 'IBM Plex Mono', monospace;
+  background: #f0f0f0; color: #555;
+}
+.card-name { font-size: 12px; font-weight: 700; line-height: 1.3; }
+.card-thai { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+/* ── Empty State ── */
+.empty {
+  text-align: center; padding: 40px 20px; color: var(--muted);
+}
+.empty .icon { font-size: 48px; margin-bottom: 8px; }
+
+/* ── FAB Button ── */
+.fab {
+  position: fixed; bottom: 20px; right: 20px;
+  width: 56px; height: 56px; border-radius: 50%;
+  background: var(--accent); color: #fff;
+  font-size: 24px; border: none; cursor: pointer;
+  box-shadow: 0 4px 16px rgba(37,99,235,0.4);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 200; transition: transform 0.2s;
+}
+.fab:active { transform: scale(0.92); }
+
+/* ── Modal Base ── */
+.modal-overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,0.5); z-index: 300;
+  align-items: flex-end; justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+.modal {
+  background: #fff; border-radius: 18px 18px 0 0;
+  width: 100%; max-width: 500px;
+  max-height: 92vh; overflow-y: auto;
+  padding: 20px;
+  animation: slideUp 0.25s ease;
+}
+@keyframes slideUp {
+  from { transform: translateY(100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.modal-handle {
+  width: 40px; height: 4px; background: #e0e0e0;
+  border-radius: 2px; margin: 0 auto 16px;
+}
+.modal-title { font-size: 16px; font-weight: 700; margin-bottom: 16px; }
+
+/* ── Form Elements ── */
+.field { margin-bottom: 14px; }
+.field label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 5px; }
+.field input, .field select, .field textarea {
+  width: 100%; padding: 10px 12px;
+  border: 1.5px solid var(--border); border-radius: 8px;
+  font-family: 'Sarabun', sans-serif; font-size: 14px;
+  outline: none; background: #fff;
+}
+.field input:focus, .field select:focus, .field textarea:focus { border-color: var(--accent); }
+.field textarea { resize: vertical; min-height: 70px; }
+
+/* ── Image Upload Area ── */
+.img-upload-area {
+  border: 2px dashed var(--border); border-radius: 10px;
+  padding: 20px; text-align: center; cursor: pointer;
+  transition: border-color 0.15s;
+}
+.img-upload-area:hover { border-color: var(--accent); }
+.img-preview {
+  width: 100%; max-height: 200px; object-fit: contain;
+  border-radius: 8px; margin-top: 10px; display: none;
+}
+
+/* ── Buttons ── */
+.btn {
+  width: 100%; padding: 12px;
+  border: none; border-radius: 10px;
+  font-family: 'Sarabun', sans-serif; font-size: 15px;
+  font-weight: 700; cursor: pointer;
+  transition: opacity 0.15s;
+}
+.btn:active { opacity: 0.8; }
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-success { background: var(--success); color: #fff; }
+.btn-danger { background: var(--danger); color: #fff; }
+.btn-outline { background: #fff; color: var(--accent); border: 1.5px solid var(--accent); }
+.btn-sm { padding: 7px 14px; font-size: 13px; width: auto; border-radius: 7px; }
+.btn-row { display: flex; gap: 8px; margin-top: 10px; }
+
+/* ── Detail Modal ── */
+.detail-img {
+  width: 100%; max-height: 220px;
+  object-fit: contain; border-radius: 10px;
+  background: #f5f5f5; margin-bottom: 14px;
+}
+.detail-name { font-size: 18px; font-weight: 700; }
+.detail-thai { font-size: 14px; color: var(--muted); margin-bottom: 10px; }
+.detail-desc {
+  font-size: 14px; line-height: 1.7;
+  background: #f8f8f8; border-radius: 8px;
+  padding: 10px 12px; margin-bottom: 12px;
+}
+.detail-meta { font-size: 12px; color: var(--muted); }
+
+/* ── AI Section ── */
+.ai-result {
+  background: linear-gradient(135deg, #eff6ff, #f0fdf4);
+  border: 1.5px solid #bfdbfe;
+  border-radius: 10px; padding: 12px;
+  margin-top: 10px; font-size: 13px; line-height: 1.7;
+  display: none;
+}
+.ai-result.show { display: block; }
+.ai-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: var(--accent); color: #fff;
+  font-size: 10px; font-weight: 700;
+  padding: 2px 8px; border-radius: 20px;
+  margin-bottom: 6px; font-family: 'IBM Plex Mono', monospace;
+}
+.loading-dots::after {
+  content: '...';
+  animation: dots 1.2s infinite;
+}
+@keyframes dots {
+  0%,20%{ content: '.'; }
+  40%{ content: '..'; }
+  60%,100%{ content: '...'; }
+}
+
+/* ── Tray Manager ── */
+.tray-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.tray-item {
+  background: #fff; border: 1.5px solid var(--border);
+  border-radius: 10px; padding: 12px;
+  display: flex; align-items: center; gap: 10px;
+}
+.tray-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+.tray-info { flex: 1; }
+.tray-name { font-weight: 700; font-size: 14px; }
+.tray-count { font-size: 11px; color: var(--muted); }
+.tray-actions { display: flex; gap: 6px; }
+.icon-btn {
+  width: 30px; height: 30px; border-radius: 7px;
+  border: none; cursor: pointer; font-size: 15px;
+  display: flex; align-items: center; justify-content: center;
+  background: #f5f5f5;
+}
+
+/* ── Camera Section ── */
+.camera-area {
+  background: #000; border-radius: 12px;
+  aspect-ratio: 4/3; overflow: hidden;
+  position: relative; margin-bottom: 12px;
+  display: flex; align-items: center; justify-content: center;
+}
+.camera-area video, .camera-area canvas { width: 100%; height: 100%; object-fit: cover; }
+.camera-area .cam-placeholder { color: #555; text-align: center; }
+
+.snap-btn {
+  width: 64px; height: 64px; border-radius: 50%;
+  background: #fff; border: 4px solid #ccc;
+  margin: 0 auto; display: block; cursor: pointer; font-size: 24px;
+}
+
+/* ── Tray color badge ── */
+.badge-tray { color: #fff; }
+
+/* ── Notification ── */
+.toast {
+  position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%);
+  background: #1e293b; color: #fff; padding: 10px 18px;
+  border-radius: 20px; font-size: 13px; z-index: 999;
+  opacity: 0; transition: opacity 0.2s; pointer-events: none; white-space: nowrap;
+}
+.toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🔬 Instrument Identification Guide</h1>
+  <p>Surgical & CSSD Reference System</p>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('all')">🗂️ ทั้งหมด</div>
+  <div class="tab" onclick="switchTab('trays')">📦 ถาด</div>
+  <div class="tab" onclick="switchTab('camera')">📷 AI สแกน</div>
+  <div class="tab" onclick="switchTab('print')">🖨️ พิมพ์</div>
+</div>
+
+<!-- ══ PAGE: ALL INSTRUMENTS ══ -->
+<div class="page active" id="page-all">
+  <div class="search-wrap">
+    <span class="search-icon">🔍</span>
+    <input type="text" id="search-input" placeholder="ค้นหาชื่อ, ถาด, หมวดหมู่..." oninput="renderAll()">
+  </div>
+  <div class="filter-row" id="filter-row"></div>
+  <div class="grid" id="grid-all"></div>
+  <div class="empty" id="empty-all" style="display:none">
+    <div class="icon">🔧</div>
+    <div>ยังไม่มีเครื่องมือ</div>
+    <div style="font-size:12px;margin-top:4px">กด + เพื่อเพิ่ม</div>
+  </div>
+</div>
+
+<!-- ══ PAGE: TRAYS ══ -->
+<div class="page" id="page-trays">
+  <div class="tray-list" id="tray-list"></div>
+  <button class="btn btn-outline" onclick="openAddTrayModal()">➕ เพิ่มถาดใหม่</button>
+
+  <div id="tray-detail-section" style="display:none; margin-top:16px;">
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+      <button onclick="closeTrayDetail()" style="background:none;border:none;font-size:18px;cursor:pointer">←</button>
+      <h2 id="tray-detail-title" style="font-size:16px;font-weight:700;"></h2>
+    </div>
+    <div class="search-wrap">
+      <span class="search-icon">🔍</span>
+      <input type="text" id="tray-search" placeholder="ค้นหาในถาดนี้..." oninput="renderTrayDetail()">
+    </div>
+    <div class="grid" id="grid-tray"></div>
+    <div class="empty" id="empty-tray" style="display:none">
+      <div class="icon">📭</div>
+      <div>ยังไม่มีเครื่องมือในถาดนี้</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ PAGE: CAMERA / AI ══ -->
+<div class="page" id="page-camera">
+  <div class="camera-area" id="camera-area">
+    <div class="cam-placeholder">
+      <div style="font-size:48px">📷</div>
+      <div style="font-size:13px;margin-top:8px">กด "เปิดกล้อง" หรืออัปโหลดรูป</div>
+    </div>
+    <video id="cam-video" autoplay playsinline style="display:none;"></video>
+    <canvas id="cam-canvas" style="display:none;"></canvas>
+  </div>
+  <div style="display:flex; gap:8px; margin-bottom:12px;">
+    <button class="btn btn-primary btn-sm" onclick="startCamera()" id="btn-start-cam">📷 เปิดกล้อง</button>
+    <button class="btn btn-outline btn-sm" onclick="stopCamera()" id="btn-stop-cam" style="display:none">⏹️ ปิดกล้อง</button>
+    <label class="btn btn-outline btn-sm" style="display:inline-flex;align-items:center;justify-content:center;cursor:pointer;">
+      🖼️ อัปโหลด
+      <input type="file" accept="image/*" style="display:none" onchange="handleCamUpload(event)">
+    </label>
+    <button class="btn btn-success btn-sm" id="btn-snap" onclick="snapPhoto()" style="display:none">📸 ถ่าย</button>
+  </div>
+  <img id="cam-preview" src="" alt="" style="width:100%;border-radius:10px;display:none;margin-bottom:10px;">
+  <button class="btn btn-primary" id="btn-ai-scan" onclick="runAIScan()" style="display:none;">🤖 AI วิเคราะห์เครื่องมือ</button>
+  <div class="ai-result" id="ai-result"></div>
+</div>
+
+<!-- ══ PAGE: PRINT ══ -->
+<div class="page" id="page-print">
+  <div style="margin-bottom:12px;">
+    <div style="font-size:13px;font-weight:700;margin-bottom:8px;">เลือกถาดที่จะพิมพ์:</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;" id="print-tray-pills"></div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-primary" onclick="doPrint()">🖨️ พิมพ์เลย</button>
+      <button class="btn btn-outline" onclick="previewPrint()">👁️ ดูตัวอย่าง</button>
+    </div>
+  </div>
+  <div id="print-preview-area" style="display:none;margin-top:12px;">
+    <div style="font-size:12px;color:#888;margin-bottom:8px;">ตัวอย่าง (เลื่อนดูได้):</div>
+    <div id="print-preview-content" style="background:#fff;border:1px solid #e0e0e0;border-radius:10px;padding:14px;font-size:11px;"></div>
+  </div>
+</div>
+
+<!-- ══ MODALS ══ -->
+
+<!-- Add/Edit Instrument Modal -->
+<div class="modal-overlay" id="modal-add">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="add-modal-title">➕ เพิ่มเครื่องมือ</div>
+
+    <div class="field">
+      <label>ชื่อภาษาอังกฤษ *</label>
+      <input type="text" id="inp-name" placeholder="เช่น Hill Ferguson Rectal Retractor">
+    </div>
+    <div class="field">
+      <label>ชื่อ / ประเภทภาษาไทย</label>
+      <input type="text" id="inp-thai" placeholder="เช่น ที่ถ่างทวารหนัก">
+    </div>
+    <div class="field">
+      <label>ถาด *</label>
+      <select id="inp-tray">
+        <option value="">-- เลือกถาด --</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>หมวดหมู่</label>
+      <input type="text" id="inp-cat" placeholder="เช่น GENERAL, ORTHOPAEDICS">
+    </div>
+    <div class="field">
+      <label>คำอธิบาย / วิธีใช้</label>
+      <textarea id="inp-desc" placeholder="ใช้ทำอะไร, ข้อสังเกต..."></textarea>
+    </div>
+    <div class="field">
+      <label>รูปภาพ</label>
+      <div class="img-upload-area" onclick="document.getElementById('inp-img-file').click()">
+        <div id="img-upload-hint">📷 แตะเพื่อเลือกรูป</div>
+        <img id="img-preview-add" class="img-preview">
+      </div>
+      <input type="file" id="inp-img-file" accept="image/*" style="display:none" onchange="previewAddImg(event)">
+    </div>
+
+    <button class="btn btn-primary" onclick="saveInstrument()">💾 บันทึก</button>
+    <button class="btn btn-outline" style="margin-top:8px" onclick="closeModal('modal-add')">ยกเลิก</button>
+  </div>
+</div>
+
+<!-- Detail Modal -->
+<div class="modal-overlay" id="modal-detail">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <img id="detail-img" class="detail-img" src="" alt="">
+    <div id="detail-img-placeholder" style="display:none;width:100%;height:140px;background:#f0f0f0;border-radius:10px;margin-bottom:14px;display:none;align-items:center;justify-content:center;font-size:48px">🔧</div>
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+      <div>
+        <div class="detail-name" id="detail-name"></div>
+        <div class="detail-thai" id="detail-thai"></div>
+      </div>
+      <span class="tray-badge pill" id="detail-tray-badge" style="font-size:10px;"></span>
+    </div>
+    <div class="detail-desc" id="detail-desc" style="display:none"></div>
+    <div class="detail-meta" id="detail-meta"></div>
+    <div class="btn-row">
+      <button class="btn btn-outline btn-sm" onclick="editCurrentInstrument()">✏️ แก้ไข</button>
+      <button class="btn btn-danger btn-sm" onclick="deleteCurrentInstrument()">🗑️ ลบ</button>
+      <button class="btn btn-primary btn-sm" onclick="closeModal('modal-detail')">ปิด</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Tray Modal -->
+<div class="modal-overlay" id="modal-tray">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">📦 เพิ่มถาดใหม่</div>
+    <div class="field">
+      <label>ชื่อถาด *</label>
+      <input type="text" id="inp-tray-name" placeholder="เช่น HAND & FOOT TRAY">
+    </div>
+    <button class="btn btn-primary" onclick="saveTray()">💾 บันทึก</button>
+    <button class="btn btn-outline" style="margin-top:8px" onclick="closeModal('modal-tray')">ยกเลิก</button>
+  </div>
+</div>
+
+<!-- FAB -->
+<button class="fab" onclick="openAddModal()">＋</button>
+<div class="toast" id="toast"></div>
+
+<script>
+// ══════════════════════════════════════
+// DATA LAYER (localStorage)
+// ══════════════════════════════════════
+const STORE_INSTRUMENTS = 'cssd_instruments';
+const STORE_TRAYS = 'cssd_trays';
+
+const TRAY_COLORS = [
+  '#7c3aed','#059669','#d97706','#dc2626',
+  '#0891b2','#be185d','#65a30d','#ea580c','#6366f1'
+];
+
+function loadData() {
+  try {
+    return {
+      instruments: JSON.parse(localStorage.getItem(STORE_INSTRUMENTS) || '[]'),
+      trays: JSON.parse(localStorage.getItem(STORE_TRAYS) || '[]')
+    };
+  } catch { return { instruments: [], trays: [] }; }
+}
+
+function saveData(data) {
+  localStorage.setItem(STORE_INSTRUMENTS, JSON.stringify(data.instruments));
+  localStorage.setItem(STORE_TRAYS, JSON.stringify(data.trays));
+}
+
+let data = loadData();
+
+// Seed default trays if empty
+if (data.trays.length === 0) {
+  data.trays = [
+    { id: 't1', name: 'GENERAL', color: TRAY_COLORS[0] },
+    { id: 't2', name: 'HAND & FOOT TRAY', color: TRAY_COLORS[1] },
+    { id: 't3', name: 'PLASTICS TRAY', color: TRAY_COLORS[2] },
+    { id: 't4', name: 'ORTHOPAEDICS TRAY', color: TRAY_COLORS[3] },
+  ];
+  saveData(data);
+}
+
+// ══════════════════════════════════════
+// HELPERS
+// ══════════════════════════════════════
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+
+function getTrayById(id) { return data.trays.find(t => t.id === id); }
+
+function getInstrumentsByTray(trayId) {
+  return data.instruments.filter(i => i.trayId === trayId);
+}
+
+function toast(msg, dur=2000) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), dur);
+}
+
+// ══════════════════════════════════════
+// TABS
+// ══════════════════════════════════════
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('page-' + tab).classList.add('active');
+  if (tab === 'all') renderAll();
+  if (tab === 'trays') renderTrays();
+  if (tab === 'print') renderPrintPage();
+}
+
+// ══════════════════════════════════════
+// RENDER ALL
+// ══════════════════════════════════════
+let activeFilter = 'ALL';
+
+function renderAll() {
+  const q = document.getElementById('search-input').value.toLowerCase();
+  let items = data.instruments;
+  if (activeFilter !== 'ALL') items = items.filter(i => i.trayId === activeFilter);
+  if (q) items = items.filter(i =>
+    (i.name||'').toLowerCase().includes(q) ||
+    (i.thai||'').toLowerCase().includes(q) ||
+    (i.cat||'').toLowerCase().includes(q) ||
+    (i.desc||'').toLowerCase().includes(q)
+  );
+
+  // Filter pills
+  const fr = document.getElementById('filter-row');
+  fr.innerHTML = '';
+  const allPill = makePill('ALL', 'ทั้งหมด ('+ data.instruments.length +')', activeFilter === 'ALL');
+  fr.appendChild(allPill);
+  data.trays.forEach(t => {
+    const cnt = getInstrumentsByTray(t.id).length;
+    if (cnt > 0) {
+      const p = makePill(t.id, t.name+' ('+cnt+')', activeFilter === t.id, t.color);
+      fr.appendChild(p);
+    }
+  });
+
+  const grid = document.getElementById('grid-all');
+  const empty = document.getElementById('empty-all');
+  grid.innerHTML = '';
+  if (items.length === 0) { empty.style.display = 'block'; return; }
+  empty.style.display = 'none';
+  items.forEach(inst => grid.appendChild(makeCard(inst)));
+}
+
+function makePill(id, label, isActive, color) {
+  const p = document.createElement('div');
+  p.className = 'pill' + (isActive ? ' active' : '');
+  p.textContent = label;
+  p.style.color = color || '#555';
+  p.style.background = isActive ? (color ? color+'22' : '#f0f0f0') : '#f0f0f0';
+  p.onclick = () => { activeFilter = id; renderAll(); };
+  return p;
+}
+
+function makeCard(inst) {
+  const tray = getTrayById(inst.trayId);
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.onclick = () => openDetail(inst.id);
+  const imgHtml = inst.img
+    ? `<img class="card-thumb" src="${inst.img}" loading="lazy">`
+    : `<div class="card-thumb-placeholder">🔧</div>`;
+  const badgeColor = tray ? tray.color : '#888';
+  const badgeName = tray ? tray.name : '-';
+  card.innerHTML = `
+    ${imgHtml}
+    <div class="card-body">
+      <span class="tray-badge" style="background:${badgeColor}22;color:${badgeColor}">${badgeName}</span>
+      <div class="card-name">${inst.name}</div>
+      <div class="card-thai">${inst.thai || ''}</div>
+    </div>`;
+  return card;
+}
+
+// ══════════════════════════════════════
+// TRAY PAGE
+// ══════════════════════════════════════
+let currentTrayId = null;
+
+function renderTrays() {
+  const list = document.getElementById('tray-list');
+  list.innerHTML = '';
+  document.getElementById('tray-detail-section').style.display = 'none';
+  data.trays.forEach(t => {
+    const cnt = getInstrumentsByTray(t.id).length;
+    const item = document.createElement('div');
+    item.className = 'tray-item';
+    item.innerHTML = `
+      <div class="tray-dot" style="background:${t.color}"></div>
+      <div class="tray-info" onclick="openTrayDetail('${t.id}')">
+        <div class="tray-name">${t.name}</div>
+        <div class="tray-count">${cnt} เครื่องมือ</div>
+      </div>
+      <div class="tray-actions">
+        <button class="icon-btn" title="แก้ไขชื่อ" onclick="editTray('${t.id}')">✏️</button>
+        <button class="icon-btn" title="ลบถาด" onclick="deleteTray('${t.id}')">🗑️</button>
+      </div>`;
+    list.appendChild(item);
+  });
+}
+
+function openTrayDetail(trayId) {
+  currentTrayId = trayId;
+  const tray = getTrayById(trayId);
+  document.getElementById('tray-detail-title').textContent = tray.name;
+  document.getElementById('tray-detail-section').style.display = 'block';
+  document.getElementById('tray-list').style.display = 'none';
+  document.querySelector('#page-trays > .btn').style.display = 'none';
+  document.getElementById('tray-search').value = '';
+  renderTrayDetail();
+}
+
+function closeTrayDetail() {
+  currentTrayId = null;
+  document.getElementById('tray-detail-section').style.display = 'none';
+  document.getElementById('tray-list').style.display = 'flex';
+  document.querySelector('#page-trays > .btn').style.display = 'block';
+}
+
+function renderTrayDetail() {
+  const q = document.getElementById('tray-search').value.toLowerCase();
+  let items = getInstrumentsByTray(currentTrayId);
+  if (q) items = items.filter(i =>
+    (i.name||'').toLowerCase().includes(q) ||
+    (i.thai||'').toLowerCase().includes(q)
+  );
+  const grid = document.getElementById('grid-tray');
+  const empty = document.getElementById('empty-tray');
+  grid.innerHTML = '';
+  if (items.length === 0) { empty.style.display = 'block'; return; }
+  empty.style.display = 'none';
+  items.forEach(inst => grid.appendChild(makeCard(inst)));
+}
+
+function openAddTrayModal() {
+  document.getElementById('inp-tray-name').value = '';
+  openModal('modal-tray');
+}
+
+function saveTray() {
+  const name = document.getElementById('inp-tray-name').value.trim();
+  if (!name) { toast('⚠️ กรุณาใส่ชื่อถาด'); return; }
+  const color = TRAY_COLORS[data.trays.length % TRAY_COLORS.length];
+  data.trays.push({ id: uid(), name, color });
+  saveData(data);
+  closeModal('modal-tray');
+  renderTrays();
+  populateTraySelect();
+  toast('✅ เพิ่มถาดแล้ว');
+}
+
+function editTray(trayId) {
+  const tray = getTrayById(trayId);
+  const newName = prompt('แก้ไขชื่อถาด:', tray.name);
+  if (newName && newName.trim()) {
+    tray.name = newName.trim();
+    saveData(data);
+    renderTrays();
+    populateTraySelect();
+    toast('✅ แก้ไขแล้ว');
+  }
+}
+
+function deleteTray(trayId) {
+  const cnt = getInstrumentsByTray(trayId).length;
+  if (!confirm(`ลบถาดนี้? (มีเครื่องมือ ${cnt} ชิ้น — เครื่องมือจะถูกลบด้วย)`)) return;
+  data.instruments = data.instruments.filter(i => i.trayId !== trayId);
+  data.trays = data.trays.filter(t => t.id !== trayId);
+  saveData(data);
+  renderTrays();
+  populateTraySelect();
+  toast('🗑️ ลบถาดแล้ว');
+}
+
+// ══════════════════════════════════════
+// ADD / EDIT INSTRUMENT
+// ══════════════════════════════════════
+let editingId = null;
+let addImgData = null;
+
+function openAddModal(prefillTray) {
+  editingId = null;
+  addImgData = null;
+  document.getElementById('add-modal-title').textContent = '➕ เพิ่มเครื่องมือ';
+  document.getElementById('inp-name').value = '';
+  document.getElementById('inp-thai').value = '';
+  document.getElementById('inp-cat').value = '';
+  document.getElementById('inp-desc').value = '';
+  document.getElementById('img-preview-add').style.display = 'none';
+  document.getElementById('img-upload-hint').style.display = 'block';
+  populateTraySelect(prefillTray);
+  openModal('modal-add');
+}
+
+function populateTraySelect(selectedId) {
+  const sel = document.getElementById('inp-tray');
+  sel.innerHTML = '<option value="">-- เลือกถาด --</option>';
+  data.trays.forEach(t => {
+    const opt = document.createElement('option');
+    opt.value = t.id;
+    opt.textContent = t.name;
+    if (selectedId && t.id === selectedId) opt.selected = true;
+    sel.appendChild(opt);
+  });
+}
+
+function previewAddImg(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    addImgData = ev.target.result;
+    const prev = document.getElementById('img-preview-add');
+    prev.src = addImgData;
+    prev.style.display = 'block';
+    document.getElementById('img-upload-hint').style.display = 'none';
+  };
+  reader.readAsDataURL(file);
+}
+
+function saveInstrument() {
+  const name = document.getElementById('inp-name').value.trim();
+  const trayId = document.getElementById('inp-tray').value;
+  if (!name) { toast('⚠️ กรุณาใส่ชื่อเครื่องมือ'); return; }
+  if (!trayId) { toast('⚠️ กรุณาเลือกถาด'); return; }
+
+  const inst = {
+    id: editingId || uid(),
+    name,
+    thai: document.getElementById('inp-thai').value.trim(),
+    trayId,
+    cat: document.getElementById('inp-cat').value.trim(),
+    desc: document.getElementById('inp-desc').value.trim(),
+    img: addImgData,
+    updatedAt: Date.now()
+  };
+
+  if (editingId) {
+    const idx = data.instruments.findIndex(i => i.id === editingId);
+    if (idx > -1) data.instruments[idx] = inst;
+    toast('✅ แก้ไขแล้ว');
+  } else {
+    data.instruments.push(inst);
+    toast('✅ เพิ่มแล้ว');
+  }
+  saveData(data);
+  closeModal('modal-add');
+  renderAll();
+  if (currentTrayId) renderTrayDetail();
+}
+
+// ══════════════════════════════════════
+// DETAIL
+// ══════════════════════════════════════
+let currentDetailId = null;
+
+function openDetail(id) {
+  currentDetailId = id;
+  const inst = data.instruments.find(i => i.id === id);
+  if (!inst) return;
+  const tray = getTrayById(inst.trayId);
+
+  const imgEl = document.getElementById('detail-img');
+  if (inst.img) {
+    imgEl.src = inst.img;
+    imgEl.style.display = 'block';
+  } else {
+    imgEl.style.display = 'none';
+  }
+  document.getElementById('detail-name').textContent = inst.name;
+  document.getElementById('detail-thai').textContent = inst.thai || '';
+  const badge = document.getElementById('detail-tray-badge');
+  badge.textContent = tray ? tray.name : '-';
+  badge.style.background = tray ? tray.color+'22' : '#f0f0f0';
+  badge.style.color = tray ? tray.color : '#888';
+  const descEl = document.getElementById('detail-desc');
+  if (inst.desc) { descEl.textContent = inst.desc; descEl.style.display = 'block'; }
+  else descEl.style.display = 'none';
+  document.getElementById('detail-meta').textContent =
+    (inst.cat ? '📂 ' + inst.cat + '  ' : '') +
+    '🕐 ' + new Date(inst.updatedAt||Date.now()).toLocaleDateString('th-TH');
+
+  openModal('modal-detail');
+}
+
+function editCurrentInstrument() {
+  const inst = data.instruments.find(i => i.id === currentDetailId);
+  if (!inst) return;
+  editingId = inst.id;
+  addImgData = inst.img || null;
+  closeModal('modal-detail');
+  document.getElementById('add-modal-title').textContent = '✏️ แก้ไขเครื่องมือ';
+  document.getElementById('inp-name').value = inst.name;
+  document.getElementById('inp-thai').value = inst.thai || '';
+  document.getElementById('inp-cat').value = inst.cat || '';
+  document.getElementById('inp-desc').value = inst.desc || '';
+  populateTraySelect(inst.trayId);
+  if (inst.img) {
+    const prev = document.getElementById('img-preview-add');
+    prev.src = inst.img;
+    prev.style.display = 'block';
+    document.getElementById('img-upload-hint').style.display = 'none';
+  }
+  openModal('modal-add');
+}
+
+function deleteCurrentInstrument() {
+  if (!confirm('ลบเครื่องมือนี้?')) return;
+  data.instruments = data.instruments.filter(i => i.id !== currentDetailId);
+  saveData(data);
+  closeModal('modal-detail');
+  renderAll();
+  if (currentTrayId) renderTrayDetail();
+  toast('🗑️ ลบแล้ว');
+}
+
+// ══════════════════════════════════════
+// MODAL HELPERS
+// ══════════════════════════════════════
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+document.querySelectorAll('.modal-overlay').forEach(m => {
+  m.addEventListener('click', e => { if (e.target === m) closeModal(m.id); });
+});
+
+// ══════════════════════════════════════
+// CAMERA / AI SCAN
+// ══════════════════════════════════════
+let stream = null;
+let capturedImageData = null;
+
+async function startCamera() {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    const video = document.getElementById('cam-video');
+    video.srcObject = stream;
+    video.style.display = 'block';
+    document.getElementById('cam-preview').style.display = 'none';
+    document.getElementById('cam-area').innerHTML = '';
+    document.querySelector('.cam-placeholder') && (document.querySelector('.cam-placeholder').style.display = 'none');
+    document.getElementById('btn-start-cam').style.display = 'none';
+    document.getElementById('btn-stop-cam').style.display = 'inline-flex';
+    document.getElementById('btn-snap').style.display = 'inline-flex';
+    document.getElementById('btn-ai-scan').style.display = 'none';
+    document.getElementById('ai-result').classList.remove('show');
+    capturedImageData = null;
+  } catch(e) {
+    toast('⚠️ ไม่สามารถเปิดกล้องได้ — ลองอัปโหลดรูปแทน');
+  }
+}
+
+function stopCamera() {
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  document.getElementById('cam-video').style.display = 'none';
+  document.getElementById('btn-start-cam').style.display = 'inline-flex';
+  document.getElementById('btn-stop-cam').style.display = 'none';
+  document.getElementById('btn-snap').style.display = 'none';
+}
+
+function snapPhoto() {
+  const video = document.getElementById('cam-video');
+  const canvas = document.getElementById('cam-canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+  capturedImageData = canvas.toDataURL('image/jpeg', 0.8);
+  const prev = document.getElementById('cam-preview');
+  prev.src = capturedImageData;
+  prev.style.display = 'block';
+  stopCamera();
+  document.getElementById('btn-ai-scan').style.display = 'block';
+  document.getElementById('ai-result').classList.remove('show');
+}
+
+function handleCamUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    capturedImageData = ev.target.result;
+    const prev = document.getElementById('cam-preview');
+    prev.src = capturedImageData;
+    prev.style.display = 'block';
+    stopCamera();
+    document.getElementById('btn-ai-scan').style.display = 'block';
+    document.getElementById('ai-result').classList.remove('show');
+  };
+  reader.readAsDataURL(file);
+}
+
+async function runAIScan() {
+  if (!capturedImageData) { toast('⚠️ ไม่มีรูป'); return; }
+  const resultEl = document.getElementById('ai-result');
+  resultEl.classList.add('show');
+  resultEl.innerHTML = `<div class="ai-badge">🤖 AI CLAUDE</div><div class="loading-dots">กำลังวิเคราะห์</div>`;
+
+  const base64 = capturedImageData.split(',')[1];
+  const mediaType = capturedImageData.startsWith('data:image/png') ? 'image/png' : 'image/jpeg';
+
+  // Build context from existing instruments
+  const existingNames = data.instruments.map(i => i.name).slice(0, 30).join(', ');
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{
+          role: 'user',
+          content: [
+            {
+              type: 'image',
+              source: { type: 'base64', media_type: mediaType, data: base64 }
+            },
+            {
+              type: 'text',
+              text: `You are a surgical instrument expert for a CSSD (Central Sterile Services Department) at a hospital in Australia.
+
+Analyze this image and identify any surgical instruments visible.
+
+${existingNames ? `Instruments in our database: ${existingNames}` : ''}
+
+For each instrument found, provide:
+1. **Instrument Name** (English)
+2. **Thai name / type** (ชื่อไทย/ประเภท)
+3. **Category** (GENERAL / ORTHOPAEDICS / HAND & FOOT / ENT / etc.)
+4. **Use** (2-3 sentences in Thai about what it's used for)
+5. **Key identification features** (1-2 sentences)
+
+If multiple instruments are visible, identify all of them.
+If you can match to an instrument in our database, mention it.
+Format your response clearly with headers.
+Respond in Thai-English mixed (names in English, descriptions in Thai).`
+            }
+          ]
+        }]
+      })
+    });
+
+    const d = await response.json();
+    const text = d.content?.map(c => c.text || '').join('\n') || 'ไม่สามารถวิเคราะห์ได้';
+    resultEl.innerHTML = `
+      <div class="ai-badge">🤖 AI CLAUDE</div>
+      <div style="white-space:pre-wrap;font-size:13px;line-height:1.7">${text}</div>
+      <div style="margin-top:10px;">
+        <button class="btn btn-outline btn-sm" onclick="addFromAI()">➕ เพิ่มเครื่องมือนี้</button>
+      </div>`;
+  } catch(err) {
+    resultEl.innerHTML = `<div class="ai-badge">⚠️ ERROR</div><div>เกิดข้อผิดพลาด: ${err.message}</div>`;
+  }
+}
+
+function addFromAI() {
+  // Pre-fill the add modal with captured image
+  addImgData = capturedImageData;
+  openAddModal();
+  const prev = document.getElementById('img-preview-add');
+  prev.src = addImgData;
+  prev.style.display = 'block';
+  document.getElementById('img-upload-hint').style.display = 'none';
+  toast('💡 ใส่ชื่อและถาด แล้วกดบันทึก');
+}
+
+
+// ══════════════════════════════════════
+// PRINT
+// ══════════════════════════════════════
+let selectedPrintTrays = new Set(['ALL']);
+
+function renderPrintPage() {
+  const pillsEl = document.getElementById('print-tray-pills');
+  pillsEl.innerHTML = '';
+
+  const allPill = document.createElement('div');
+  allPill.className = 'pill' + (selectedPrintTrays.has('ALL') ? ' active' : '');
+  allPill.textContent = `ทั้งหมด (${data.instruments.length})`;
+  allPill.style.color = '#1e293b';
+  allPill.style.background = selectedPrintTrays.has('ALL') ? '#e2e8f0' : '#f0f0f0';
+  allPill.onclick = () => {
+    selectedPrintTrays.clear();
+    selectedPrintTrays.add('ALL');
+    renderPrintPage();
+    document.getElementById('print-preview-area').style.display = 'none';
+  };
+  pillsEl.appendChild(allPill);
+
+  data.trays.forEach(t => {
+    const cnt = getInstrumentsByTray(t.id).length;
+    if (cnt === 0) return;
+    const p = document.createElement('div');
+    const isActive = selectedPrintTrays.has(t.id);
+    p.className = 'pill' + (isActive ? ' active' : '');
+    p.textContent = t.name + ' (' + cnt + ')';
+    p.style.color = t.color;
+    p.style.background = isActive ? t.color + '22' : '#f0f0f0';
+    p.onclick = () => {
+      selectedPrintTrays.delete('ALL');
+      if (selectedPrintTrays.has(t.id)) selectedPrintTrays.delete(t.id);
+      else selectedPrintTrays.add(t.id);
+      if (selectedPrintTrays.size === 0) selectedPrintTrays.add('ALL');
+      renderPrintPage();
+      document.getElementById('print-preview-area').style.display = 'none';
+    };
+    pillsEl.appendChild(p);
+  });
+}
+
+function getInstrumentsForPrint() {
+  if (selectedPrintTrays.has('ALL')) return data.instruments;
+  return data.instruments.filter(i => selectedPrintTrays.has(i.trayId));
+}
+
+function buildPrintHTML(forWindow) {
+  const items = getInstrumentsForPrint();
+  if (items.length === 0) return '<p style="color:#888;text-align:center;padding:20px;">ไม่มีเครื่องมือ</p>';
+
+  const groups = {};
+  items.forEach(inst => {
+    if (!groups[inst.trayId]) groups[inst.trayId] = { tray: getTrayById(inst.trayId), items: [] };
+    groups[inst.trayId].items.push(inst);
+  });
+
+  const fontLink = forWindow ? '<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">' : '';
+
+  const sz = forWindow ? '11px' : '10px';
+  const styles = fontLink + `<style>
+    body{font-family:'Sarabun',sans-serif;font-size:${sz};color:#111;margin:${forWindow?'20px':'0'}}
+    .print-header{border-bottom:2px solid #1e293b;padding-bottom:6px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:flex-end}
+    .print-header h1{font-size:${forWindow?'16px':'13px'};font-weight:700}
+    .print-header small{font-size:9px;color:#888;font-family:'IBM Plex Mono',monospace}
+    .tray-section{margin-bottom:14px;page-break-inside:avoid}
+    .tray-header{font-size:10px;font-weight:700;padding:3px 8px;border-radius:4px;margin-bottom:5px;display:flex;align-items:center;gap:5px}
+    .tray-dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex-shrink:0}
+    table{width:100%;border-collapse:collapse}
+    th{font-size:9px;font-weight:700;text-align:left;padding:4px 6px;background:#f8f8f8;border-bottom:1px solid #ddd;font-family:'IBM Plex Mono',monospace}
+    td{padding:5px 6px;border-bottom:1px solid #f0f0f0;vertical-align:middle}
+    tr:last-child td{border-bottom:none}
+    .td-thumb{width:38px;height:38px;border-radius:5px;object-fit:cover;display:block}
+    .td-no-img{width:38px;height:38px;background:#f0f0f0;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:18px}
+    .inst-name{font-weight:700;font-size:${sz};line-height:1.3}
+    .inst-thai{font-size:9px;color:#666}
+    .inst-cat{font-size:8px;font-family:'IBM Plex Mono',monospace;color:#888}
+    .inst-desc{font-size:${forWindow?'10px':'9px'};color:#333;line-height:1.5}
+    @media print{@page{margin:12mm;size:A4}body{margin:0}}
+  </style>`;
+
+  const traysHTML = Object.values(groups).map(function(g) {
+    const tray = g.tray;
+    const tItems = g.items;
+    const color = tray ? tray.color : '#888';
+    const name = tray ? tray.name : 'ไม่มีถาด';
+    const rows = tItems.map(function(inst) {
+      const imgCell = inst.img
+        ? '<img class="td-thumb" src="' + inst.img + '">'
+        : '<div class="td-no-img">🔧</div>';
+      return '<tr><td style="width:46px">' + imgCell + '</td><td><div class="inst-name">' + inst.name + '</div>'
+        + (inst.thai ? '<div class="inst-thai">' + inst.thai + '</div>' : '')
+        + (inst.cat ? '<div class="inst-cat">' + inst.cat + '</div>' : '')
+        + '</td><td style="width:42%"><div class="inst-desc">' + (inst.desc || '-') + '</div></td></tr>';
+    }).join('');
+    return '<div class="tray-section"><div class="tray-header" style="background:' + color + '18;color:' + color + '">'
+      + '<span class="tray-dot" style="background:' + color + '"></span>' + name
+      + '<span style="margin-left:auto;font-size:9px;color:#888">' + tItems.length + ' ชิ้น</span></div>'
+      + '<table><tr><th style="width:46px">รูป</th><th>ชื่อเครื่องมือ</th><th style="width:42%">คำอธิบาย / วิธีใช้</th></tr>'
+      + rows + '</table></div>';
+  }).join('');
+
+  const titleParts = selectedPrintTrays.has('ALL')
+    ? 'ทุกถาด'
+    : data.trays.filter(function(t){ return selectedPrintTrays.has(t.id); }).map(function(t){ return t.name; }).join(', ');
+
+  return styles
+    + '<div class="print-header"><h1>🔬 CSSD Instruments — ' + titleParts + '</h1>'
+    + '<small>Holmesglen Private Hospital · ' + new Date().toLocaleDateString('th-TH') + ' · ' + items.length + ' รายการ</small></div>'
+    + traysHTML;
+}
+
+function previewPrint() {
+  const area = document.getElementById('print-preview-area');
+  const content = document.getElementById('print-preview-content');
+  content.innerHTML = buildPrintHTML(false);
+  area.style.display = 'block';
+  area.scrollIntoView({ behavior: 'smooth' });
+}
+
+function doPrint() {
+  const items = getInstrumentsForPrint();
+  if (items.length === 0) { toast('⚠️ ไม่มีเครื่องมือที่จะพิมพ์'); return; }
+  const win = window.open('', '_blank');
+  win.document.write('<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8"><title>CSSD Print</title></head><body>' + buildPrintHTML(true) + '</body></html>');
+  win.document.close();
+  win.onload = function(){ win.focus(); win.print(); };
+}
+
+// ══════════════════════════════════════
+// INIT
+// ══════════════════════════════════════
+populateTraySelect();
+renderAll();
+</script>
+</body>
+</html>
