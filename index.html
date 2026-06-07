@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>CSSD Instrument Manager</title>
+<title>Instrument Identification Guide</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap');
 
@@ -416,7 +416,7 @@ body {
       1) ตั้งค่า URL ก่อน<br>
       2) ไปแท็บ “ถาด” เพื่อเพิ่มชื่อถาด<br>
       3) กดปุ่ม + เพื่อเพิ่มเครื่องมือ<br>
-      4) ทุกครั้งที่บันทึก ระบบจะเก็บทั้งในเครื่องและพยายามซิงก์ไป Google Sheet
+      4) ระบบจะดึงข้อมูลจาก Google Sheet อัตโนมัติเมื่อเปิดเว็บ และส่งข้อมูลขึ้น Google Sheet อัตโนมัติเมื่อบันทึก
     </div>
   </div>
 </div>
@@ -559,6 +559,7 @@ function saveApiUrl() {
   localStorage.setItem(STORE_API_URL, API_URL);
   setSyncStatus('✅ บันทึก URL แล้ว<br>ตอนนี้สามารถกด “ดึงข้อมูล” หรือ “ส่งข้อมูล” ได้');
   toast('✅ บันทึก URL แล้ว');
+  autoPullOnStart();
 }
 
 async function loadCloudData(showToast) {
@@ -646,7 +647,7 @@ if (data.trays.length === 0) {
     { id: 't3', name: 'PLASTICS TRAY', color: TRAY_COLORS[2] },
     { id: 't4', name: 'ORTHOPAEDICS TRAY', color: TRAY_COLORS[3] },
   ];
-  saveData(data);
+  saveDataAndSync(data);
 }
 
 // ══════════════════════════════════════
@@ -821,7 +822,7 @@ function saveTray() {
   if (!name) { toast('⚠️ กรุณาใส่ชื่อถาด'); return; }
   const color = TRAY_COLORS[data.trays.length % TRAY_COLORS.length];
   data.trays.push({ id: uid(), name, color });
-  saveData(data);
+  saveDataAndSync(data);
   closeModal('modal-tray');
   renderTrays();
   populateTraySelect();
@@ -833,7 +834,7 @@ function editTray(trayId) {
   const newName = prompt('แก้ไขชื่อถาด:', tray.name);
   if (newName && newName.trim()) {
     tray.name = newName.trim();
-    saveData(data);
+    saveDataAndSync(data);
     renderTrays();
     populateTraySelect();
     toast('✅ แก้ไขแล้ว');
@@ -845,7 +846,7 @@ function deleteTray(trayId) {
   if (!confirm(`ลบถาดนี้? (มีเครื่องมือ ${cnt} ชิ้น — เครื่องมือจะถูกลบด้วย)`)) return;
   data.instruments = data.instruments.filter(i => i.trayId !== trayId);
   data.trays = data.trays.filter(t => t.id !== trayId);
-  saveData(data);
+  saveDataAndSync(data);
   renderTrays();
   populateTraySelect();
   toast('🗑️ ลบถาดแล้ว');
@@ -922,7 +923,7 @@ function saveInstrument() {
     data.instruments.push(inst);
     toast('✅ เพิ่มแล้ว');
   }
-  saveData(data);
+  saveDataAndSync(data);
   closeModal('modal-add');
   renderAll();
   if (currentTrayId) renderTrayDetail();
@@ -986,7 +987,7 @@ function editCurrentInstrument() {
 function deleteCurrentInstrument() {
   if (!confirm('ลบเครื่องมือนี้?')) return;
   data.instruments = data.instruments.filter(i => i.id !== currentDetailId);
-  saveData(data);
+  saveDataAndSync(data);
   closeModal('modal-detail');
   renderAll();
   if (currentTrayId) renderTrayDetail();
@@ -1225,15 +1226,63 @@ function doPrint() {
   win.onload = function(){ win.focus(); win.print(); };
 }
 
+
+// ══════════════════════════════════════
+// AUTO SYNC
+// ══════════════════════════════════════
+let AUTO_SYNC_READY = false;
+let AUTO_SYNC_TIMER = null;
+
+function hasWebAppUrl() {
+  return !!(localStorage.getItem(STORE_WEBAPP_URL) || '').trim();
+}
+
+function setSyncStatus(msg, ok) {
+  const el = document.getElementById('sync-status');
+  if (!el) return;
+  el.innerHTML = (ok ? '✅ ' : '⚠️ ') + msg;
+}
+
+async function autoPullOnStart() {
+  if (!hasWebAppUrl()) return;
+  try {
+    await pullFromSheet();
+    AUTO_SYNC_READY = true;
+    setSyncStatus('Auto Sync เปิดใช้งานแล้ว: ดึงข้อมูลล่าสุดจาก Google Sheet สำเร็จ', true);
+  } catch (err) {
+    AUTO_SYNC_READY = true;
+    setSyncStatus('Auto Sync: ดึงข้อมูลไม่สำเร็จ แต่ยังใช้ข้อมูลในเครื่องได้', false);
+  }
+}
+
+function autoPushSoon() {
+  if (!hasWebAppUrl()) return;
+  clearTimeout(AUTO_SYNC_TIMER);
+  AUTO_SYNC_TIMER = setTimeout(async () => {
+    try {
+      await pushToSheet();
+      setSyncStatus('Auto Sync: บันทึกขึ้น Google Sheet แล้ว ' + new Date().toLocaleTimeString('th-TH'), true);
+    } catch (err) {
+      setSyncStatus('Auto Sync: ส่งขึ้น Google Sheet ไม่สำเร็จ ข้อมูลยังอยู่ในเครื่อง', false);
+    }
+  }, 600);
+}
+
+function saveDataAndSync(nextData) {
+  saveData(nextData);
+  autoPushSoon();
+}
+
+
 // ══════════════════════════════════════
 // INIT
 // ══════════════════════════════════════
 populateTraySelect();
 renderAll();
+autoPullOnStart();
 if (API_URL) {
   setTimeout(() => loadCloudData(false), 800);
 }
 </script>
 </body>
 </html>
-
